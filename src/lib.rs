@@ -18,16 +18,30 @@ use num_rational::Ratio;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PathIdentifier(Ratio<u64>);
 
+impl std::iter::FromIterator<u64> for PathIdentifier {
+    fn from_iter<T>(iter: T) -> Self
+    where
+        T: IntoIterator<Item = u64>,
+    {
+        let mut ratio = Ratio::from_integer(0);
+        for piece in iter.into_iter() {
+            ratio = (ratio + piece).recip();
+        }
+        PathIdentifier(ratio.recip())
+    }
+}
+
 impl std::str::FromStr for PathIdentifier {
     type Err = std::num::ParseIntError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut ratio = Ratio::from_integer(0);
-        for piece in s.split('.').rev() {
-            let piece: u64 = piece.parse()?;
-            ratio = (ratio + piece).recip();
-        }
-        Ok(PathIdentifier(ratio.recip()))
+        s.split('.').map(u64::from_str).rev().collect()
+    }
+}
+
+impl From<Vec<u64>> for PathIdentifier {
+    fn from(pieces: Vec<u64>) -> PathIdentifier {
+        pieces.into_iter().rev().collect()
     }
 }
 
@@ -52,5 +66,14 @@ mod tests {
         assert_eq!(parse_id("3.12.5"), (188, 61));
         assert_eq!(parse_id("3.12.5.1"), (225, 73));
         assert_eq!(parse_id("3.12.5.1.21"), (4913, 1594));
+    }
+
+    #[test]
+    fn can_parse_path_vecs() {
+        assert_eq!(PathIdentifier::from(vec![3]), (3, 1));
+        assert_eq!(PathIdentifier::from(vec![3, 12]), (37, 12));
+        assert_eq!(PathIdentifier::from(vec![3, 12, 5]), (188, 61));
+        assert_eq!(PathIdentifier::from(vec![3, 12, 5, 1]), (225, 73));
+        assert_eq!(PathIdentifier::from(vec![3, 12, 5, 1, 21]), (4913, 1594));
     }
 }
