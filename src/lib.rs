@@ -51,6 +51,68 @@ impl PartialEq<(u64, u64)> for PathIdentifier {
     }
 }
 
+#[derive(Clone, Debug)]
+struct Euclidean {
+    a: u64,
+    b: u64,
+    q: u64,
+    r: u64,
+}
+
+impl PathIdentifier {
+    fn euclidean(&self) -> Euclidean {
+        Euclidean {
+            a: 0,
+            b: *self.0.numer(),
+            q: 0,
+            r: *self.0.denom(),
+        }
+    }
+}
+
+impl Euclidean {
+    fn advance(&mut self) {
+        assert!(self.r != 0);
+        self.a = self.b;
+        self.b = self.r;
+        self.q = self.a / self.b;
+        self.r = self.a % self.b;
+    }
+}
+
+struct EuclideanIterator {
+    euclidean: Option<Euclidean>,
+}
+
+impl PathIdentifier {
+    fn euclidean_iter(&self) -> EuclideanIterator {
+        EuclideanIterator {
+            euclidean: Some(self.euclidean()),
+        }
+    }
+}
+
+impl Iterator for EuclideanIterator {
+    type Item = Euclidean;
+
+    fn next(&mut self) -> Option<Euclidean> {
+        if let Some(euclidean) = self.euclidean.as_mut() {
+            if euclidean.r == 0 {
+                self.euclidean = None;
+            } else {
+                euclidean.advance();
+            }
+        }
+        self.euclidean.clone()
+    }
+}
+
+impl PathIdentifier {
+    pub fn path(&self) -> impl Iterator<Item = u64> {
+        self.euclidean_iter().map(|euclidean| euclidean.q)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -75,5 +137,18 @@ mod tests {
         assert_eq!(PathIdentifier::from(vec![3, 12, 5]), (188, 61));
         assert_eq!(PathIdentifier::from(vec![3, 12, 5, 1]), (225, 73));
         assert_eq!(PathIdentifier::from(vec![3, 12, 5, 1, 21]), (4913, 1594));
+    }
+
+    fn generate_path(s: &str) -> Vec<u64> {
+        parse_id(s).path().collect()
+    }
+
+    #[test]
+    fn can_generate_paths() {
+        assert_eq!(generate_path("3"), vec![3]);
+        assert_eq!(generate_path("3.12"), vec![3, 12]);
+        assert_eq!(generate_path("3.12.5"), vec![3, 12, 5]);
+        assert_eq!(generate_path("3.12.5.1"), vec![3, 12, 6]); // sad face [3, 12, 5, 1]);
+        assert_eq!(generate_path("3.12.5.1.21"), vec![3, 12, 5, 1, 21]);
     }
 }
