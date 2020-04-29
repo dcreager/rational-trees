@@ -1,0 +1,6 @@
+[package]
+name = "rational-trees"
+version = "0.1.0-pre"
+authors = ["Douglas Creager <dcreager@dcreager.net>"]
+edition = "2018"
+license = "Apache-2.0"
