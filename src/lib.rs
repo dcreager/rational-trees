@@ -15,6 +15,15 @@
 
 use num_rational::Ratio;
 
+/// Each rational number represents _two_ continued fractions: one that ends with a 1, and one that
+/// does not.  That means that we can't translate path vectors into continued fractions as-is — we
+/// wouldn't be able to distinguish `[3,5,1]` from `[3,6]`, for example, since both paths would be
+/// represented by the same rational number.  To get around this, we sneakily add 2 to every
+/// element of a path vector as we translate it into a rational number, and subtract it back when
+/// regenerating a path.  That ensures that our path vectors can use 0-based indexes, and that
+/// we'll _never_ have any 1s in the continued fractions that we create.
+const FUDGE: u64 = 2;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PathIdentifier(Ratio<u64>);
 
@@ -25,7 +34,7 @@ impl std::iter::FromIterator<u64> for PathIdentifier {
     {
         let mut ratio = Ratio::from_integer(0);
         for piece in iter.into_iter() {
-            ratio = (ratio + piece).recip();
+            ratio = (ratio + piece + FUDGE).recip();
         }
         PathIdentifier(ratio.recip())
     }
@@ -109,7 +118,7 @@ impl Iterator for EuclideanIterator {
 
 impl PathIdentifier {
     pub fn path(&self) -> impl Iterator<Item = u64> {
-        self.euclidean_iter().map(|euclidean| euclidean.q)
+        self.euclidean_iter().map(|euclidean| euclidean.q - FUDGE)
     }
 }
 
@@ -123,20 +132,20 @@ mod tests {
 
     #[test]
     fn can_parse_paths() {
-        assert_eq!(parse_id("3"), (3, 1));
-        assert_eq!(parse_id("3.12"), (37, 12));
-        assert_eq!(parse_id("3.12.5"), (188, 61));
-        assert_eq!(parse_id("3.12.5.1"), (225, 73));
-        assert_eq!(parse_id("3.12.5.1.21"), (4913, 1594));
+        assert_eq!(parse_id("3"), (5, 1));
+        assert_eq!(parse_id("3.12"), (71, 14));
+        assert_eq!(parse_id("3.12.5"), (502, 99));
+        assert_eq!(parse_id("3.12.5.1"), (1577, 311));
+        assert_eq!(parse_id("3.12.5.1.21"), (36773, 7252));
     }
 
     #[test]
     fn can_parse_path_vecs() {
-        assert_eq!(PathIdentifier::from(vec![3]), (3, 1));
-        assert_eq!(PathIdentifier::from(vec![3, 12]), (37, 12));
-        assert_eq!(PathIdentifier::from(vec![3, 12, 5]), (188, 61));
-        assert_eq!(PathIdentifier::from(vec![3, 12, 5, 1]), (225, 73));
-        assert_eq!(PathIdentifier::from(vec![3, 12, 5, 1, 21]), (4913, 1594));
+        assert_eq!(PathIdentifier::from(vec![3]), (5, 1));
+        assert_eq!(PathIdentifier::from(vec![3, 12]), (71, 14));
+        assert_eq!(PathIdentifier::from(vec![3, 12, 5]), (502, 99));
+        assert_eq!(PathIdentifier::from(vec![3, 12, 5, 1]), (1577, 311));
+        assert_eq!(PathIdentifier::from(vec![3, 12, 5, 1, 21]), (36773, 7252));
     }
 
     fn generate_path(s: &str) -> Vec<u64> {
@@ -148,7 +157,7 @@ mod tests {
         assert_eq!(generate_path("3"), vec![3]);
         assert_eq!(generate_path("3.12"), vec![3, 12]);
         assert_eq!(generate_path("3.12.5"), vec![3, 12, 5]);
-        assert_eq!(generate_path("3.12.5.1"), vec![3, 12, 6]); // sad face [3, 12, 5, 1]);
+        assert_eq!(generate_path("3.12.5.1"), vec![3, 12, 5, 1]);
         assert_eq!(generate_path("3.12.5.1.21"), vec![3, 12, 5, 1, 21]);
     }
 }
