@@ -143,6 +143,22 @@ impl PathIdentifier {
     }
 }
 
+impl PathIdentifier {
+    pub fn parent(&self) -> Option<PathIdentifier> {
+        if self.is_root() {
+            None
+        } else {
+            let tail = self.0 / self.1;
+            Some(PathIdentifier(
+                self.1,
+                self.0 - self.1 * tail,
+                self.3,
+                self.2 - self.3 * tail,
+            ))
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,5 +205,15 @@ mod tests {
         assert_eq!(generate_path("3.12.5"), vec![3, 12, 5]);
         assert_eq!(generate_path("3.12.5.1"), vec![3, 12, 5, 1]);
         assert_eq!(generate_path("3.12.5.1.21"), vec![3, 12, 5, 1, 21]);
+    }
+
+    #[test]
+    fn can_get_parents() {
+        assert_eq!(parse_id("").parent(), None);
+        assert_eq!(parse_id("3").parent(), Some(parse_id("")));
+        assert_eq!(parse_id("3.12").parent(), Some(parse_id("3")));
+        assert_eq!(parse_id("3.12.5").parent(), Some(parse_id("3.12")));
+        assert_eq!(parse_id("3.12.5.1").parent(), Some(parse_id("3.12.5")));
+        assert_eq!(parse_id("3.12.5.1.21").parent(), Some(parse_id("3.12.5.1")));
     }
 }
