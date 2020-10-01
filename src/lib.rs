@@ -13,6 +13,9 @@
 // limitations under the License.
 // ------------------------------------------------------------------------------------------------
 
+use std::cmp::Ordering;
+use std::ops::Range;
+
 /// Each rational number represents _two_ continued fractions: one that ends with a 1, and one that
 /// does not.  That means that we can't translate path vectors into continued fractions as-is — we
 /// wouldn't be able to distinguish `[3,5,1]` from `[3,6]`, for example, since both paths would be
@@ -25,6 +28,15 @@ const FUDGE: u64 = 2;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PathIdentifier(u64, u64, u64, u64);
 
+#[derive(Eq, PartialEq, PartialOrd)]
+struct Ratio(u64, u64);
+
+impl Ord for Ratio {
+    fn cmp(&self, other: &Ratio) -> Ordering {
+        (self.0 as u128 * other.1 as u128).cmp(&(self.1 as u128 * other.0 as u128))
+    }
+}
+
 impl PathIdentifier {
     pub fn root() -> PathIdentifier {
         PathIdentifier(1, 0, 0, 1)
@@ -36,6 +48,17 @@ impl PathIdentifier {
 
     fn from_path_element(element: u64) -> PathIdentifier {
         PathIdentifier(element, 1, 1, 0)
+    }
+
+    fn interval(&self) -> Range<Ratio> {
+        let mut result = Range {
+            start: Ratio(self.0, self.2),
+            end: Ratio(self.0 + self.1, self.2 + self.3),
+        };
+        if result.start > result.end {
+            std::mem::swap(&mut result.start, &mut result.end);
+        }
+        result
     }
 }
 
@@ -157,6 +180,43 @@ impl PathIdentifier {
             ))
         }
     }
+
+    pub fn is_parent_of(&self, other: &PathIdentifier) -> bool {
+        self.0 == other.1 && self.2 == other.3
+    }
+
+    pub fn is_ancestor_of(&self, other: &PathIdentifier) -> bool {
+        if self.is_root() {
+            return !other.is_root();
+        }
+
+        let self_interval = self.interval();
+        let other_interval = other.interval();
+        fn f(x: &Ratio) -> f64 {
+            (x.0 as f64) / (x.1 as f64)
+        }
+        eprintln!(
+            "--- {:.05} {:.05} {:.05} {:.05}",
+            f(&self_interval.start),
+            f(&other_interval.start),
+            f(&other_interval.end),
+            f(&self_interval.end)
+        );
+        self_interval.start < other_interval.start && self_interval.end > other_interval.end
+    }
+
+    pub fn next_sibling(&self) -> Option<PathIdentifier> {
+        if self.is_root() {
+            None
+        } else {
+            Some(PathIdentifier(
+                self.0 + self.1,
+                self.1,
+                self.2 + self.3,
+                self.3,
+            ))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -215,5 +275,53 @@ mod tests {
         assert_eq!(parse_id("3.12.5").parent(), Some(parse_id("3.12")));
         assert_eq!(parse_id("3.12.5.1").parent(), Some(parse_id("3.12.5")));
         assert_eq!(parse_id("3.12.5.1.21").parent(), Some(parse_id("3.12.5.1")));
+    }
+
+    #[test]
+    fn check_is_parent_of() {
+        assert!(parse_id("").is_parent_of(&parse_id("3")));
+        assert!(parse_id("3").is_parent_of(&parse_id("3.12")));
+        assert!(parse_id("3.12").is_parent_of(&parse_id("3.12.5")));
+        assert!(parse_id("3.12.5").is_parent_of(&parse_id("3.12.5.1")));
+        assert!(parse_id("3.12.5.1").is_parent_of(&parse_id("3.12.5.1.21")));
+    }
+
+    #[test]
+    fn check_is_ancestor_of() {
+        assert!(parse_id("").is_ancestor_of(&parse_id("3")));
+        assert!(parse_id("").is_ancestor_of(&parse_id("3.12")));
+        assert!(parse_id("").is_ancestor_of(&parse_id("3.12.5")));
+        assert!(parse_id("").is_ancestor_of(&parse_id("3.12.5.1")));
+        assert!(parse_id("").is_ancestor_of(&parse_id("3.12.5.1.21")));
+
+        assert!(parse_id("3").is_ancestor_of(&parse_id("3.12")));
+        assert!(parse_id("3").is_ancestor_of(&parse_id("3.12.5")));
+        assert!(parse_id("3").is_ancestor_of(&parse_id("3.12.5.1")));
+        assert!(parse_id("3").is_ancestor_of(&parse_id("3.12.5.1.21")));
+
+        assert!(parse_id("3.12").is_ancestor_of(&parse_id("3.12.5")));
+        assert!(parse_id("3.12").is_ancestor_of(&parse_id("3.12.5.1")));
+        assert!(parse_id("3.12").is_ancestor_of(&parse_id("3.12.5.1.21")));
+
+        assert!(parse_id("3.12.5").is_ancestor_of(&parse_id("3.12.5.1")));
+        assert!(parse_id("3.12.5").is_ancestor_of(&parse_id("3.12.5.1.21")));
+
+        assert!(parse_id("3.12.5.1").is_ancestor_of(&parse_id("3.12.5.1.21")));
+    }
+
+    #[test]
+    fn can_get_next_siblings() {
+        assert_eq!(parse_id("").next_sibling(), None);
+        assert_eq!(parse_id("3").next_sibling(), Some(parse_id("4")));
+        assert_eq!(parse_id("3.12").next_sibling(), Some(parse_id("3.13")));
+        assert_eq!(parse_id("3.12.5").next_sibling(), Some(parse_id("3.12.6")));
+        assert_eq!(
+            parse_id("3.12.5.1").next_sibling(),
+            Some(parse_id("3.12.5.2"))
+        );
+        assert_eq!(
+            parse_id("3.12.5.1.21").next_sibling(),
+            Some(parse_id("3.12.5.1.22"))
+        );
     }
 }
